@@ -1,0 +1,106 @@
+#include <stdio.h>
+#include <cuda_runtime.h>
+
+#define N 8   // Tamaño de la matriz NxN
+
+/* =========================================================
+   KERNEL B: Un hilo por elemento
+   ========================================================= */
+__global__ void matrixAddElement(float* A, float* B, float* C, int n) {
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (row < n && col < n) {
+        int idx = row * n + col;
+        C[idx] = A[idx] + B[idx];
+    }
+}
+
+/* =========================================================
+   KERNEL C: Un hilo por fila
+   ========================================================= */
+__global__ void matrixAddRow(float* A, float* B, float* C, int n) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < n) {
+        for (int col = 0; col < n; col++) {
+            int idx = row * n + col;
+            C[idx] = A[idx] + B[idx];
+        }
+    }
+}
+
+/* =========================================================
+   KERNEL D: Un hilo por columna
+   ========================================================= */
+__global__ void matrixAddCol(float* A, float* B, float* C, int n) {
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (col < n) {
+        for (int row = 0; row < n; row++) {
+            int idx = row * n + col;
+            C[idx] = A[idx] + B[idx];
+        }
+    }
+}
+
+/* =========================================================
+   HOST STUB – SUMA DE MATRICES
+   ========================================================= */
+void matrixAddHost(float* A, float* B, float* C, int n, int mode) {
+    int size = n * n * sizeof(float);
+    float *d_A, *d_B, *d_C;
+
+    cudaMalloc((void**)&d_A, size);
+    cudaMalloc((void**)&d_B, size);
+    cudaMalloc((void**)&d_C, size);
+
+    cudaMemcpy(d_A, A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, B, size, cudaMemcpyHostToDevice);
+
+    if (mode == 0) {
+        // Kernel B: un hilo por elemento
+        dim3 dimBlock(16, 16);
+        dim3 dimGrid((n + 15) / 16, (n + 15) / 16);
+        matrixAddElement<<<dimGrid, dimBlock>>>(d_A, d_B, d_C, n);
+    }
+    else if (mode == 1) {
+        // Kernel C: un hilo por fila
+        int threads = 256;
+        int blocks = (n + threads - 1) / threads;
+        matrixAddRow<<<blocks, threads>>>(d_A, d_B, d_C, n);
+    }
+    else {
+        // Kernel D: un hilo por columna
+        int threads = 256;
+        int blocks = (n + threads - 1) / threads;
+        matrixAddCol<<<blocks, threads>>>(d_A, d_B, d_C, n);
+    }
+
+    cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+}
+
+/* =========================================================
+   MAIN – EJERCICIO 1
+   ========================================================= */
+int main() {
+    float A[N*N], B[N*N], C[N*N];
+
+    for (int i = 0; i < N*N; i++) {
+        A[i] = 1.0f;
+        B[i] = 2.0f;
+    }
+
+    printf("=== Suma de Matrices (1 hilo por elemento) ===\n");
+    matrixAddHost(A, B, C, N, 0);
+
+    for (int i = 0; i < N; i++)
+        printf("%.1f ", C[i]);
+    printf("\n");
+
+    return 0;
+}
