@@ -1,0 +1,68 @@
+#include <stdio.h>
+#include <cuda_runtime.h>
+
+#define N 8   // Tamaño de la matriz NxN
+
+/* =========================================================
+   KERNEL: Un hilo por elemento del vector de salida
+   ========================================================= */
+__global__ void matrixVectorMult(float* A, float* B, float* C, int n) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < n) {
+        float sum = 0.0f;
+        for (int j = 0; j < n; j++) {
+            sum += B[row * n + j] * C[j];
+        }
+        A[row] = sum;
+    }
+}
+
+/* =========================================================
+   HOST STUB – MATRIZ VECTOR
+   ========================================================= */
+void matrixVectorHost(float* A, float* B, float* C, int n) {
+    float *d_A, *d_B, *d_C;
+
+    cudaMalloc((void**)&d_A, n * sizeof(float));
+    cudaMalloc((void**)&d_B, n * n * sizeof(float));
+    cudaMalloc((void**)&d_C, n * sizeof(float));
+
+    cudaMemcpy(d_B, B, n * n * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_C, C, n * sizeof(float), cudaMemcpyHostToDevice);
+
+    int threads = 256;
+    int blocks = (n + threads - 1) / threads;
+
+    matrixVectorMult<<<blocks, threads>>>(d_A, d_B, d_C, n);
+
+    cudaMemcpy(A, d_A, n * sizeof(float), cudaMemcpyDeviceToHost);
+
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+}
+
+/* =========================================================
+   MAIN – EJERCICIO 2
+   ========================================================= */
+int main() {
+    float B[N*N];
+    float C[N];
+    float A[N];
+
+    for (int i = 0; i < N*N; i++)
+        B[i] = 1.0f;
+
+    for (int i = 0; i < N; i++)
+        C[i] = 1.0f;
+
+    printf("=== Multiplicación Matriz–Vector ===\n");
+    matrixVectorHost(A, B, C, N);
+
+    for (int i = 0; i < N; i++)
+        printf("%.1f ", A[i]);
+    printf("\n");
+
+    return 0;
+}
